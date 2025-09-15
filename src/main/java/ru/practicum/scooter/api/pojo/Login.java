@@ -1,4 +1,4 @@
-package ru.practicum.scooter.api.tests;
+package ru.practicum.scooter.api.pojo;
 
 public class Login {
     private String login;
@@ -12,7 +12,6 @@ public class Login {
     public Login() {
     }
 
-    // геттеры и сеттеры
     public String getLogin() {
         return login;
     }

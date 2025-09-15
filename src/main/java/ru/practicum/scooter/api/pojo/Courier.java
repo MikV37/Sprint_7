@@ -1,4 +1,4 @@
-package ru.practicum.scooter.api.tests;
+package ru.practicum.scooter.api.pojo;
 
 public class Courier {
 

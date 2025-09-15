@@ -1,110 +1,105 @@
+package ru.practicum.scooter.api.tests;
+
+import io.qameta.allure.Description;
+import io.qameta.allure.Step;
+import io.qameta.allure.junit4.DisplayName;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import io.restassured.response.ValidatableResponse;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import ru.practicum.scooter.api.pojo.Courier;
+import ru.practicum.scooter.api.pojo.Login;
 
+import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
 public class CourierLoginApiTest {
 
-    private static final String BASE_URI = "https://qa-scooter.praktikum-services.ru/";
+    private static final String BASE_URI = "https://qa-scooter.praktikum-services.ru";
+    private Courier courier;
+    private Integer courierId;
 
     @Before
     public void setUp() {
         RestAssured.baseURI = BASE_URI;
+        courier = new Courier(
+                "user_" + System.currentTimeMillis(),
+                "pwd_" + System.currentTimeMillis(),
+                "Test"
+        );
     }
 
-    // 1) Успешный логин возвращает id (код 200 и поле id)
-    @Test
-    public void testSuccessfulLoginReturnsId() {
-        String login = "user_success_" + System.nanoTime();
-        String password = "1234";
+    @After
+    public void tearDown() {
+        if (courierId != null) {
+            deleteCourierStep(courierId);
+        }
+    }
 
-        // регистрация курьера
-        String registerPayload = "{ \"login\": \"" + login + "\", \"password\": \"" + password + "\", \"firstName\": \"Test\" }";
-        RestAssured.given()
+    @Step("Создание курьера для теста")
+    public void createCourierStep(Courier courier) {
+        given()
                 .contentType(ContentType.JSON)
-                .body(registerPayload)
+                .body(courier)
                 .when()
                 .post("/api/v1/courier")
                 .then()
                 .statusCode(201);
-
-        // логин
-        String loginPayload = "{ \"login\": \"" + login + "\", \"password\": \"" + password + "\" }";
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(loginPayload)
-                .when()
-                .post("/api/v1/courier/login")
-                .then()
-                .statusCode(200)
-                .contentType(ContentType.JSON)
-                .body("id", greaterThan(0));
     }
 
-    // 2) Запрос без поля password: 400
-    @Test
-    public void testLoginMissingPasswordReturnsBadRequest() {
-        String login = "user_missing_pwd_" + System.nanoTime();
-        String password = "pwd";
-
-        // регистрация
-        String registerPayload = "{ \"login\": \"" + login + "\", \"password\": \"" + password + "\", \"firstName\": \"Test\" }";
-        RestAssured.given()
+    @Step("Авторизация курьера с логином '{login.login}' и паролем '{login.password}'")
+    public ValidatableResponse loginCourierStep(Login login) {
+        return given()
                 .contentType(ContentType.JSON)
-                .body(registerPayload)
-                .when()
-                .post("/api/v1/courier")
-                .then()
-                .statusCode(201);
-
-        // без password
-        String payload = "{ \"login\": \"" + login + "\" }";
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(payload)
+                .body(login)
                 .when()
                 .post("/api/v1/courier/login")
-                .then()
-                .statusCode(400)
-                .contentType(ContentType.JSON)
-                .body("message", equalTo("Недостаточно данных для входа"));
+                .then();
     }
 
-    // 3) Запрос без поля login: 400
-    @Test
-    public void testLoginMissingLoginReturnsBadRequest() {
-        String password = "pwd";
-
-        // без login
-        String payload = "{ \"password\": \"" + password + "\" }";
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(payload)
-                .when()
-                .post("/api/v1/courier/login")
+    @Step("Удаление курьера по ID: {courierId}")
+    public void deleteCourierStep(int courierId) {
+        given()
+                .delete("/api/v1/courier/{id}", courierId)
                 .then()
-                .statusCode(400)
-                .contentType(ContentType.JSON)
-                .body("message", equalTo("Недостаточно данных для входа"));
+                .statusCode(200);
     }
 
-    // 4) Запрос с несуществующей учетной записью: 404 и сообщение
     @Test
-    public void testLoginNotFoundReturnsNotFound() {
-        String login = "nonexistent_" + System.nanoTime();
-        String password = "doesnotexist";
+    @DisplayName("Успешная авторизация курьера")
+    @Description("Проверка, что при успешной авторизации возвращается ID курьера")
+    public void successfulLoginReturnsId() {
+        createCourierStep(courier);
+        Login loginData = new Login(courier.getLogin(), courier.getPassword());
+        ValidatableResponse loginResponse = loginCourierStep(loginData);
+        loginResponse.statusCode(200).body("id", notNullValue());
+        courierId = loginResponse.extract().path("id");
+    }
 
-        String payload = "{ \"login\": \"" + login + "\", \"password\": \"" + password + "\" }";
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(payload)
-                .when()
-                .post("/api/v1/courier/login")
-                .then()
-                .statusCode(404)
-                .contentType(ContentType.JSON)
-                .body("message", equalTo("Учетная запись не найдена"));
+    @Test
+    @DisplayName("Авторизация без пароля")
+    @Description("Проверка, что API возвращает ошибку 400 при попытке авторизации без пароля")
+    public void loginMissingPasswordReturnsBadRequest() {
+        createCourierStep(courier);
+
+        Login loginData = new Login(courier.getLogin(), null);
+        ValidatableResponse loginResponse = loginCourierStep(loginData);
+
+        loginResponse.statusCode(400).body("message", equalTo("Недостаточно данных для входа"));
+
+        courierId = loginCourierStep(new Login(courier.getLogin(), courier.getPassword()))
+                .extract().path("id");
+    }
+
+    @Test
+    @DisplayName("Авторизация с несуществующими данными")
+    @Description("Проверка, что API возвращает ошибку 404 при попытке авторизации с несуществующим логином/паролем")
+    public void loginWithNonexistentCredentialsReturnsNotFound() {
+        Login loginData = new Login("nonexistent_" + System.nanoTime(), "password");
+        ValidatableResponse loginResponse = loginCourierStep(loginData);
+
+        loginResponse.statusCode(404).body("message", equalTo("Учетная запись не найдена"));
     }
 }

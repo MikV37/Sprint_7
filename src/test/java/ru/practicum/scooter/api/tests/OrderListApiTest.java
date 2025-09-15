@@ -1,68 +1,47 @@
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+package ru.practicum.scooter.api.tests;
+
+import io.qameta.allure.Description;
+import io.qameta.allure.Step;
+import io.qameta.allure.junit4.DisplayName;
 import io.restassured.RestAssured;
-import io.restassured.response.Response;
-import org.junit.After;
+import io.restassured.response.ValidatableResponse;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.Assert.*;
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.*;
 
 public class OrderListApiTest {
 
     private static final String BASE_URI = "https://qa-scooter.praktikum-services.ru/";
-    private Gson gson;
 
     @Before
     public void setUp() {
         RestAssured.baseURI = BASE_URI;
-        gson = new Gson();
     }
 
-    @After
-    public void tearDown() {
-        // Если тесты ничего не создают, этот метод можно оставить пустым.
-        // Если вы добавляете создание тестовых данных, здесь можно их удалить.
-    }
 
-    // Вспомогательный метод: выполнить GET /api/v1/orders и вернуть разобранный JsonObject
-    private JsonObject getOrdersAsJson(String path) {
-        Response resp = RestAssured
-                .given()
+    @Step("Отправка GET-запроса на получение списка заказов")
+    public ValidatableResponse getOrderListStep() {
+        return given()
                 .when()
-                .get(path)
-                .then()
-                .statusCode(200)
-                .extract()
-                .response();
+                .get("/api/v1/orders")
+                .then();
+    }
 
-        String body = resp.asString();
-        return gson.fromJson(body, JsonObject.class);
+    @Step("Проверка, что в теле ответа есть непустой список заказов")
+    public void checkOrderListIsReturned(ValidatableResponse response) {
+        response.assertThat()
+                .statusCode(200)
+                .body("orders", notNullValue())
+                .body("orders", instanceOf(List.class));
     }
 
     @Test
-    public void testResponseContainsOrdersListOnly() {
-        // Тест: только проверка наличия списка заказов в ответе
-        String path = "/api/v1/orders";
-
-        JsonObject root = getOrdersAsJson(path);
-
-        // 1) Корневой объект не должен быть null
-        assertNotNull("Ответ не должен быть null", root);
-
-        // 2) Поле orders должно существовать и быть массивом
-        assertTrue("Должно быть поле 'orders'", root.has("orders"));
-
-        JsonElement ordersElem = root.get("orders");
-        assertNotNull("Поле 'orders' не должно быть null", ordersElem);
-        assertTrue("Поле 'orders' должно быть массивом", ordersElem.isJsonArray());
-
-        // Дополнительно можно привести к JsonArray если нужен доступ к элементам
-        // JsonArray orders = ordersElem.getAsJsonArray();
+    @DisplayName("Проверка получения списка заказов")
+    @Description("Тест проверяет, что API возвращает список заказов (поле orders)")
+    public void getOrderListReturnsOrders() {
+        ValidatableResponse response = getOrderListStep();
+        checkOrderListIsReturned(response);
     }
 }
