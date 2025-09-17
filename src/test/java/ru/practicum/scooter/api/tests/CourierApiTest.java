@@ -17,7 +17,6 @@ import static org.hamcrest.Matchers.is;
 public class CourierApiTest {
     private CourierApiClient courierClient;
     private Courier courier;
-    private Integer courierId;
 
     @Before
     public void setUp() {
@@ -32,12 +31,15 @@ public class CourierApiTest {
 
     @After
     public void tearDown() {
-        if (courierId != null) {
-            courierClient.delete(courierId)
-                    .assertThat()
-                    .statusCode(SC_OK);
+        if (courier.getLogin() != null && courier.getPassword() != null) {
+            ValidatableResponse loginResponse = courierClient.login(Login.from(courier));
+            int courierId = loginResponse.extract().path("id");
+            if (courierId != 0) {
+                courierClient.delete(courierId);
+            }
         }
     }
+
     @Test
     @DisplayName("Успешное создание курьера")
     @Description("Проверка, что API позволяет создать курьера с валидными данными")
@@ -47,9 +49,6 @@ public class CourierApiTest {
                 .statusCode(SC_CREATED)
                 .and()
                 .body("ok", is(true));
-
-        ValidatableResponse loginResponse = courierClient.login(Login.from(courier));
-        courierId = loginResponse.extract().path("id");
     }
 
     @Test
@@ -57,9 +56,6 @@ public class CourierApiTest {
     @Description("Проверка, что API возвращает ошибку при попытке создать курьера с существующим логином")
     public void cannotCreateTwoCouriersWithSameLogin() {
         courierClient.create(courier);
-        ValidatableResponse loginResponse = courierClient.login(Login.from(courier));
-        courierId = loginResponse.extract().path("id");
-
         courierClient.create(courier)
                 .assertThat()
                 .statusCode(SC_CONFLICT)
@@ -88,5 +84,5 @@ public class CourierApiTest {
                 .statusCode(SC_BAD_REQUEST)
                 .body("message", equalTo("Недостаточно данных для создания учетной записи"));
     }
-
 }
+
